@@ -21,7 +21,10 @@ import * as schema from "./schema";
 //    snapshots (.tar.gz) gravados atomicamente (.tmp -> rename).
 // ---------------------------------------------------------------------------
 
-const DATABASE_URL = process.env.DATABASE_URL;
+// Aceita tanto DATABASE_URL (manual) quanto POSTGRES_URL (injetada
+// automaticamente pela integração oficial Supabase → Vercel, já apontando
+// para o pooler/transaction mode). Prioridade: manual > integração.
+const DATABASE_URL = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 const USE_POSTGRES = !!DATABASE_URL;
 
 const SNAPSHOT = process.env.KARMEN_DB_FILE ?? "./.karmen-db.tar.gz";
