@@ -3,35 +3,47 @@ import { existsSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
+import { drizzle as pgDrizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import * as schema from "./schema";
 
 // ---------------------------------------------------------------------------
-// Banco de dev: PGlite EM MEMÓRIA + snapshot atômico em arquivo.
-// Rodar em memória evita a corrupção do diretório quando o processo é morto no
-// meio de uma escrita (a causa do erro "Aborted()" ao fechar/reabrir o app).
-// A durabilidade vem de snapshots (.tar.gz) gravados de forma atômica
-// (grava .tmp -> rename), que nunca ficam pela metade. Ao subir, carrega o
-// último snapshot. Perda máxima em um kill abrupto: o intervalo de snapshot.
-// Em produção (Supabase/Postgres) nada disso é necessário.
+// Dois modos de banco, escolhidos por DATABASE_URL:
+//
+//  • PRODUÇÃO (Vercel/Supabase): se `DATABASE_URL` estiver definida, usa Postgres
+//    (postgres.js + Drizzle). Persistência real — indispensável em serverless,
+//    onde cada request pode cair numa instância diferente (por isso o app
+//    "não passava do login" com o banco em memória).
+//
+//  • DEV local: sem `DATABASE_URL`, usa PGlite EM MEMÓRIA + snapshot atômico em
+//    arquivo. Rodar em memória evita a corrupção do diretório quando o processo
+//    é morto no meio de uma escrita ("Aborted()"). A durabilidade vem de
+//    snapshots (.tar.gz) gravados atomicamente (.tmp -> rename).
 // ---------------------------------------------------------------------------
+
+const DATABASE_URL = process.env.DATABASE_URL;
+const USE_POSTGRES = !!DATABASE_URL;
 
 const SNAPSHOT = process.env.KARMEN_DB_FILE ?? "./.karmen-db.tar.gz";
 const SNAPSHOT_TMP = SNAPSHOT + ".tmp";
 const SNAPSHOT_INTERVAL_MS = 4000;
 
+// Tipamos o `db` pelo shape do PGlite; a API de query usada (select/insert/
+// update/delete) é idêntica na versão postgres-js, então fazemos cast lá.
 type Db = PgliteDatabase<typeof schema>;
 
 type GlobalWithDb = typeof globalThis & {
   __karmenClient?: PGlite;
+  __karmenSql?: ReturnType<typeof postgres>;
   __karmenDb?: Db;
   __karmenInit?: Promise<void>;
   __karmenPersistTimer?: ReturnType<typeof setInterval>;
 };
 const g = globalThis as GlobalWithDb;
 
+// DDL das tabelas (idempotente). A extensão `vector` fica só no caminho PGlite
+// (não é usada em runtime hoje; evita exigir permissão de extensão no Postgres).
 const BOOTSTRAP_SQL = `
-CREATE EXTENSION IF NOT EXISTS vector;
-
 CREATE TABLE IF NOT EXISTS organizations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
@@ -215,14 +227,34 @@ function schedulePersistence(client: PGlite) {
   g.__karmenPersistTimer = timer;
 }
 
-async function init(): Promise<void> {
+async function initPostgres(): Promise<void> {
+  // Pooler do Supabase (modo transação/pgbouncer) exige prepare:false.
+  const sql = postgres(DATABASE_URL!, { prepare: false, ssl: "require", max: 3 });
+  try {
+    await sql.unsafe(BOOTSTRAP_SQL); // idempotente (CREATE ... IF NOT EXISTS)
+  } catch (err) {
+    // Corrida entre instâncias serverless pode colidir em CREATE concorrente;
+    // como é tudo IF NOT EXISTS, "already exists" é benigno.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/already exists|duplicate/i.test(msg)) throw err;
+  }
+  g.__karmenSql = sql;
+  g.__karmenDb = pgDrizzle(sql, { schema }) as unknown as Db;
+}
+
+async function initPglite(): Promise<void> {
   const loadDataDir = await loadSnapshotBlob();
   const client = new PGlite({ loadDataDir, extensions: { vector } });
-  await client.exec(BOOTSTRAP_SQL);
+  await client.exec("CREATE EXTENSION IF NOT EXISTS vector;\n" + BOOTSTRAP_SQL);
   g.__karmenClient = client;
   g.__karmenDb = drizzle(client, { schema });
   await persist(client); // garante um snapshot inicial
   schedulePersistence(client);
+}
+
+async function init(): Promise<void> {
+  if (USE_POSTGRES) await initPostgres();
+  else await initPglite();
 }
 
 export async function ensureDb(): Promise<void> {
