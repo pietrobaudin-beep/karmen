@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Identidade visual inspirada no cal.com: claro por padrão, paleta neutra,
+   botões primários quase-pretos, bordas sutis, muito respiro. Tema escuro
+   incluído para paridade (botões invertem para branco, como no Cal dark).
+--------------------------------------------------------------------------- */
+:root {
+  --background: #f9fafb; /* cal gray-50 — página */
+  --surface: #ffffff; /* cards, sidebar */
+  --surface-2: #f3f4f6; /* hover / muted */
+  --border: #e5e7eb; /* gray-200 "subtle" */
+  --text: #111827; /* gray-900 "emphasis" */
+  --text-dim: #6b7280; /* gray-500 "muted" */
+  --accent: #111827; /* botão primário (near-black, estilo Cal) */
+  --accent-fg: #ffffff;
+  --brand: #fa2901; /* cor de marca KARMEN — usada nos toques da Karmen AI */
+  --brand-fg: #ffffff;
+  --danger: #dc2626;
+  --ok: #16a34a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #101012;
+    --surface: #17171a;
+    --surface-2: #202024;
+    --border: #292930;
+    --text: #f4f4f5;
+    --text-dim: #a1a1aa;
+    --accent: #ffffff; /* Cal dark: botões brancos, texto escuro */
+    --accent-fg: #101012;
+    --brand: #ff4a29; /* marca um pouco mais clara no escuro p/ contraste */
+    --brand-fg: #ffffff;
+    --danger: #f87171;
+    --ok: #4ade80;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-brand: var(--brand);
+  --color-brand-fg: var(--brand-fg);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Cantos ao estilo Cal (mais contidos que o padrão) */
+  --radius-lg: 0.5rem; /* 8px */
+  --radius-xl: 0.625rem; /* 10px */
+  --radius-2xl: 0.75rem; /* 12px */
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.011em; /* leve tracking negativo, tipografia Cal */
+}
+
+* {
+  border-color: var(--border);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}

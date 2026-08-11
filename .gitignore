@@ -1,0 +1,13 @@
+node_modules
+.next
+.pglite
+.karmen-db.tar.gz
+.karmen-db.tar.gz.tmp
+.env
+.env.local
+next-env.d.ts
+*.tsbuildinfo
+.DS_Store
+
+# Claude Code local (por máquina)
+.claude/settings.local.json
